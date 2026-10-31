@@ -35,6 +35,7 @@ Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpack
 ## Good to know
 
 - Chrome puts your cursor in the address bar on new tabs. If you'd rather start in the search box, turn that on in settings. The address bar will then show the extension's address.
+- Chrome adds a bar at the bottom of new tab pages that come from extensions. To hide it, right-click it and choose **Hide footer on New Tab page**.
 - Link icons come from Chrome's own cache. A site you haven't visited yet shows a plain globe until you do.
 - A search that starts with a number opens that link instead. To search for something like "1password", click the search box and type a space first.
 

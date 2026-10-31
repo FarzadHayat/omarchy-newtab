@@ -45,7 +45,18 @@ const ACCENTS = ["accent", "cyan", "magenta", "yellow", "green", "red"];
 const $ = (id) => document.getElementById(id);
 
 const state = load();
-let system = readJSON("omarchy-newtab-system");
+let system = cleanPalette(readJSON("omarchy-newtab-system"));
+let systemMissing = false;
+
+// The synced theme comes from a local file; keep only well-formed values so nothing in it
+// can inject markup or styles.
+function cleanPalette(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = { name: typeof raw.name === "string" ? raw.name.slice(0, 60) : "omarchy", mode: raw.mode === "light" ? "light" : "dark" };
+  for (const [k, v] of Object.entries(raw)) if (/^[a-z]+$/.test(k) && /^#[0-9a-f]{3,8}$/i.test(v)) out[k] = v;
+  if (typeof raw.wallpaper === "string" && /^omarchy-wallpaper\.jpg(\?v=[\w-]+)?$/.test(raw.wallpaper)) out.wallpaper = raw.wallpaper;
+  return out.bg && out.fg && out.accent ? out : null;
+}
 
 function readJSON(key) {
   try {
@@ -74,7 +85,9 @@ if (state.focusSearch && location.search !== FOCUS_QUERY && globalThis.chrome?.t
   chrome.tabs.getCurrent((tab) => {
     if (!tab) return;
     const url = chrome.runtime.getURL(`src/newtab.html${FOCUS_QUERY}`);
-    chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true }, () => chrome.tabs.remove(tab.id));
+    chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true }, (created) => {
+      if (created && !chrome.runtime.lastError) chrome.tabs.remove(tab.id);
+    });
   });
 }
 
@@ -102,7 +115,7 @@ function applyTheme(name) {
   for (const [k, v] of Object.entries(t)) if (v.startsWith("#")) root.setProperty(`--${k}`, v);
   document.documentElement.style.colorScheme = t.mode;
   document.querySelectorAll(".links img").forEach((img) => img.complete && markLowContrast(img));
-  $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system?.name || FALLBACK}` : name;
+  $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system ? system.name : "not synced"}` : name;
   document.querySelectorAll(".theme-opt").forEach((b) => {
     b.setAttribute("aria-checked", b.dataset.theme === name);
     b.tabIndex = b.dataset.theme === name ? 0 : -1;
@@ -114,15 +127,19 @@ async function syncSystemTheme() {
   let next;
   try {
     const res = await fetch("omarchy-theme.json", { cache: "no-store" });
-    if (!res.ok) return;
-    next = await res.json();
+    if (!res.ok) throw new Error(res.status);
+    next = cleanPalette(await res.json());
+    systemMissing = false;
   } catch {
+    // Without bin/install there is no file; stop polling every 2s and check on tab focus.
+    systemMissing = true;
     return;
   }
-  if (JSON.stringify(next) === JSON.stringify(system)) return;
+  if (!next || JSON.stringify(next) === JSON.stringify(system)) return;
   system = next;
   localStorage.setItem("omarchy-newtab-system", JSON.stringify(system));
-  renderThemePicker();
+  // Rebuilding the picker while settings are open would drop keyboard focus.
+  if (!dialog.open) renderThemePicker();
   if (state.theme === SYSTEM) applyTheme(SYSTEM);
   applyWallpaper();
 }
@@ -146,8 +163,18 @@ function renderThemePicker() {
       b.setAttribute("aria-checked", name === state.theme);
       // One tab stop for the group; arrow keys move between themes.
       b.tabIndex = name === state.theme ? 0 : -1;
-      b.innerHTML = `<span class="swatch" aria-hidden="true">${[t.bg, t.fg, t.accent, t.cyan, t.magenta, t.yellow]
-        .map((c) => `<i style="background:${c}"></i>`).join("")}</span><span class="theme-name">${name === SYSTEM ? "omarchy (system)" : name}</span>`;
+      const swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.setAttribute("aria-hidden", "true");
+      for (const c of [t.bg, t.fg, t.accent, t.cyan, t.magenta, t.yellow]) {
+        const i = document.createElement("i");
+        i.style.background = c || "transparent";
+        swatch.append(i);
+      }
+      const label = document.createElement("span");
+      label.className = "theme-name";
+      label.textContent = name === SYSTEM ? "omarchy (system)" : name;
+      b.append(swatch, label);
       b.addEventListener("click", () => {
         state.theme = name;
         applyTheme(name);
@@ -211,11 +238,18 @@ function parseLinks(text) {
       groups.push({ name: line.replace(/^#+/, "").trim() || `group ${groups.length + 1}`, links: [] });
       return;
     }
-    const [label, url] = line.split("|").map((s) => s.trim());
+    // Split on the first bar only, so urls may contain "|".
+    const bar = line.indexOf("|");
+    const label = bar === -1 ? "" : line.slice(0, bar).trim();
+    const url = bar === -1 ? "" : line.slice(bar + 1).trim();
     if (!label || !url) return errors.push(`line ${i + 1}: use "label | url"`);
     let href;
     try {
-      href = new URL(/^[a-z][\w+.-]*:/i.test(url) ? url : `https://${url}`).href;
+      // "localhost:3000" has no scheme even though it contains a colon.
+      const hasScheme = /^[a-z][\w+.-]*:\/\//i.test(url) || /^(mailto|file|chrome|about):/i.test(url);
+      const parsed = new URL(hasScheme ? url : `${/^(localhost|\d)/.test(url) ? "http" : "https"}://${url}`);
+      if (/^(javascript|data|vbscript):$/.test(parsed.protocol)) throw new Error("blocked scheme");
+      href = parsed.href;
     } catch {
       return errors.push(`line ${i + 1}: "${url}" is not a valid url`);
     }
@@ -336,17 +370,18 @@ function showGroup(i) {
 
 // ---------- search ----------
 
-const URL_LIKE = /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+|\d{1,3}(\.\d{1,3}){3})(:\d+)?([/?#]\S*)?$/i;
+const URL_LIKE = /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)*\.[a-z]{2,}|\d{1,3}(\.\d{1,3}){3})(:\d+)?([/?#]\S*)?$/i;
 
 function toUrl(q) {
   return /^https?:\/\//i.test(q) ? q : `${/^(localhost|\d)/.test(q) ? "http" : "https"}://${q}`;
 }
 
-function searchWeb(q) {
+function searchWeb(q, newTab = false) {
   if (globalThis.chrome?.search?.query) {
-    chrome.search.query({ text: q, disposition: "CURRENT_TAB" });
+    chrome.search.query({ text: q, disposition: newTab ? "NEW_TAB" : "CURRENT_TAB" });
   } else {
-    location.href = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    newTab ? window.open(url, "_blank") : (location.href = url);
   }
 }
 
@@ -517,13 +552,14 @@ function select(i) {
 }
 
 function closeSuggestions() {
+  queryId++;
   suggestions = [];
   renderSuggestions();
 }
 
 function choose(r, newTab = false) {
   if (!r) return;
-  if (r.kind === "search") return searchWeb(r.q);
+  if (r.kind === "search") return searchWeb(r.q, newTab);
   if (r.kind === "tab" && !newTab) return switchToTab(r);
   if (newTab) {
     window.open(r.href, "_blank");
@@ -562,8 +598,8 @@ q.addEventListener("input", async () => {
 
 q.addEventListener("keydown", (e) => {
   if (list.hidden) return;
-  if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) select(selected + 1);
-  else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) select(selected - 1);
+  if (e.key === "ArrowDown") select(selected + 1);
+  else if (e.key === "ArrowUp") select(selected - 1);
   else if (e.key === "Enter") choose(suggestions[selected], e.shiftKey);
   else if (e.key === "Escape") closeSuggestions();
   else return;
@@ -585,6 +621,7 @@ $("search").addEventListener("submit", (e) => {
 const dialog = $("settings");
 
 function openSettings() {
+  renderThemePicker();
   $("set-name").value = state.name;
   $("set-clock").value = state.clock;
   $("set-wallpaper").checked = state.wallpaper;
@@ -593,29 +630,45 @@ function openSettings() {
     box.checked = granted.has(box.dataset.source);
     box.disabled = !globalThis.chrome?.permissions;
   });
-  $("set-links").value = state.links;
+  $("set-links").value = linksDraft ?? state.links;
   $("links-error").textContent = "";
   $("links-saved").textContent = "";
   dialog.showModal();
+  if (linksDraft !== null) saveLinks();
 }
 
 $("open-settings").addEventListener("click", openSettings);
 
-$("save").addEventListener("click", () => {
+// Returns false and shows the first error when the links text can't be saved.
+function saveLinks() {
   const text = $("set-links").value;
   const { errors } = parseLinks(text);
   if (errors.length) {
     $("links-error").textContent = errors[0];
     $("set-links").setAttribute("aria-invalid", "true");
     $("set-links").focus();
-    return;
+    return false;
   }
   $("set-links").removeAttribute("aria-invalid");
   $("links-error").textContent = "";
-  state.links = text;
-  save();
-  renderLinks();
-  $("links-saved").textContent = "saved";
+  if (text !== state.links) {
+    state.links = text;
+    save();
+    renderLinks();
+  }
+  return true;
+}
+
+$("save").addEventListener("click", () => {
+  if (saveLinks()) $("links-saved").textContent = "saved";
+});
+
+// Closing settings keeps link edits, like every other setting. Edits with a broken line
+// are kept as a draft and shown again, with the error, next time settings open.
+let linksDraft = null;
+dialog.addEventListener("close", () => {
+  const text = $("set-links").value;
+  linksDraft = text === state.links || saveLinks() ? null : text;
 });
 
 $("set-links").addEventListener("input", () => ($("links-saved").textContent = ""));
@@ -662,6 +715,8 @@ $("reset").addEventListener("click", () => {
   renderLinks();
   updatePrompt();
   tick();
+  // Match the editor to the reset links so closing doesn't save the old ones back.
+  $("set-links").value = state.links;
   dialog.close();
 });
 
@@ -721,5 +776,5 @@ setInterval(tick, 1000);
 loadGranted();
 if (location.search === FOCUS_QUERY) q.focus();
 syncSystemTheme();
-setInterval(() => document.visibilityState === "visible" && syncSystemTheme(), 2000);
+setInterval(() => document.visibilityState === "visible" && !systemMissing && syncSystemTheme(), 2000);
 document.addEventListener("visibilitychange", syncSystemTheme);

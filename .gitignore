@@ -1,3 +1,6 @@
 src/omarchy-theme.json
 src/omarchy-wallpaper.jpg
 src/.omarchy-wallpaper.version
+src/omarchy-theme.json.*
+src/omarchy-wallpaper.jpg.tmp
+src/.sync.lock

@@ -10,9 +10,16 @@ hook="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-newtab-sync"
 units="$HOME/.config/systemd/user"
 name="omarchy-newtab-sync"
 
-# Write paths relative to home when possible, so the files read the same on every machine.
-home_path="${sync/#$HOME/\$HOME}"
-unit_path="${sync/#$HOME/%h}"
+# Write paths relative to home when they're plain, so the files read the same on every
+# machine. Anything else is quoted for bash and escaped for systemd.
+rest="${sync#"$HOME"/}"
+if [[ $sync == "$HOME/"* && $rest =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  hook_bin="\"\$HOME/$rest\""
+  unit_path="%h/$rest"
+else
+  hook_bin="$(printf '%q' "$sync")"
+  unit_path="${sync//%/%%}"
+fi
 
 if [[ ${1:-} == "--uninstall" ]]; then
   systemctl --user disable --now "$name.path" 2>/dev/null || true
@@ -30,7 +37,7 @@ cat >"$hook" <<EOF
 # Omarchy theme-set hook from Omarchy New Tab: copy the new theme's colors into
 # the extension so open and new tabs follow the system theme.
 
-bin="$home_path"
+bin=$hook_bin
 [[ -x \$bin ]] || exit 0
 
 "\$bin" || notify-send -u low "Omarchy New Tab" "Couldn't sync the theme colors."
@@ -58,12 +65,12 @@ ConditionPathExists=$unit_path
 
 [Service]
 Type=oneshot
-ExecStart=$unit_path
+ExecStart="$unit_path"
 EOF
 
 systemctl --user daemon-reload
 systemctl --user enable --now "$name.path"
-"$sync"
+"$sync" || echo "No Omarchy theme found yet; it will sync on the next theme change."
 
 cat <<EOF
 Theme sync is on. Last step: open chrome://extensions, turn on Developer mode,

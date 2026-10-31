@@ -1,56 +1,79 @@
 #!/bin/bash
 # Copy the active Omarchy theme colors and wallpaper into the extension so the new tab
 # can follow them.
-# Run by the Omarchy theme-set hook; safe to run by hand.
+# Run by the Omarchy theme-set hook and the wallpaper watcher; safe to run by hand.
 set -euo pipefail
 
-theme_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme"
-colors="$theme_dir/colors.toml"
-name_file="$(dirname "$theme_dir")/theme.name"
+# Omarchy always keeps its state here, whatever XDG_STATE_HOME says.
+current="$HOME/.local/state/omarchy/current"
+colors="$current/theme/colors.toml"
+background="$current/background"
 src="$(cd "$(dirname "$0")/.." && pwd)/src"
 out="$src/omarchy-theme.json"
-background="$(dirname "$theme_dir")/background"
 
 [[ -f $colors ]] || { echo "no Omarchy theme colors at $colors" >&2; exit 1; }
 
-get() { sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\(.*\)\".*/\1/p" "$colors" | head -1; }
+# The theme hook and the wallpaper watcher both fire on a theme switch; run one at a time.
+exec 9>"$src/.sync.lock"
+flock 9
 
-name="$(cat "$name_file" 2>/dev/null || echo omarchy)"
+tmp=""
+trap 'rm -f "$tmp" "$src/omarchy-wallpaper.jpg.tmp"' EXIT
+
+# First quoted value for a key; accepts "double" or 'single' quotes.
+get() { sed -n "s/^$1[[:space:]]*=[[:space:]]*[\"']\([^\"']*\)[\"'].*/\1/p" "$colors" | head -1; }
+
+# Escape a value for a JSON string.
+json() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+name="$(cat "$current/theme.name" 2>/dev/null || echo omarchy)"
 
 # Shrink the wallpaper so new tabs stay fast; the version busts the browser cache.
+# A wallpaper that can't be converted keeps the previous one instead of stopping the color sync.
 wallpaper=""
 if [[ -f $background ]]; then
   source_path="$(readlink -f "$background")"
   version="$(stat -c %Y "$source_path")-$(printf '%s' "$source_path" | cksum | cut -d' ' -f1)"
   if [[ "$(cat "$src/.omarchy-wallpaper.version" 2>/dev/null)" != "$version" ]]; then
+    converted=false
     if command -v magick >/dev/null; then
-      magick "$source_path" -resize '2560x1600>' -quality 82 "$src/omarchy-wallpaper.jpg"
+      # [0] takes the first frame, so animated wallpapers still give one image.
+      magick "${source_path}[0]" -resize '2560x1600>' -quality 82 "jpg:$src/omarchy-wallpaper.jpg.tmp" && converted=true
     else
-      cp "$source_path" "$src/omarchy-wallpaper.jpg"
+      cp "$source_path" "$src/omarchy-wallpaper.jpg.tmp" && converted=true
     fi
-    echo "$version" >"$src/.omarchy-wallpaper.version"
+    if $converted; then
+      mv "$src/omarchy-wallpaper.jpg.tmp" "$src/omarchy-wallpaper.jpg"
+      echo "$version" >"$src/.omarchy-wallpaper.version"
+    else
+      echo "couldn't convert wallpaper $source_path; keeping the previous one" >&2
+    fi
   fi
-  wallpaper="omarchy-wallpaper.jpg?v=$version"
+  if [[ -f $src/omarchy-wallpaper.jpg ]]; then
+    wallpaper="omarchy-wallpaper.jpg?v=$(cat "$src/.omarchy-wallpaper.version" 2>/dev/null || echo 0)"
+  fi
 fi
+
 tmp="$(mktemp "$out.XXXXXX")"
 cat >"$tmp" <<JSON
 {
-  "name": "$name",
-  "wallpaper": "$wallpaper",
-  "mode": "$(get mode)",
-  "bg": "$(get background)",
-  "surface": "$(get lighter_background)",
-  "line": "$(get selection)",
-  "fg": "$(get foreground)",
-  "bright": "$(get bright_foreground)",
-  "muted": "$(get muted)",
-  "accent": "$(get accent)",
-  "red": "$(get red)",
-  "yellow": "$(get yellow)",
-  "green": "$(get green)",
-  "cyan": "$(get cyan)",
-  "magenta": "$(get magenta)"
+  "name": "$(json "$name")",
+  "wallpaper": "$(json "$wallpaper")",
+  "mode": "$(json "$(get mode)")",
+  "bg": "$(json "$(get background)")",
+  "surface": "$(json "$(get lighter_background)")",
+  "line": "$(json "$(get selection)")",
+  "fg": "$(json "$(get foreground)")",
+  "bright": "$(json "$(get bright_foreground)")",
+  "muted": "$(json "$(get muted)")",
+  "accent": "$(json "$(get accent)")",
+  "red": "$(json "$(get red)")",
+  "yellow": "$(json "$(get yellow)")",
+  "green": "$(json "$(get green)")",
+  "cyan": "$(json "$(get cyan)")",
+  "magenta": "$(json "$(get magenta)")"
 }
 JSON
 chmod 644 "$tmp"
 mv "$tmp" "$out"
+tmp=""
