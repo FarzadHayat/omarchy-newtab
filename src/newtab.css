@@ -304,17 +304,22 @@ body.has-wallpaper {
   border: var(--border) solid var(--line);
   color: var(--fg);
   text-decoration: none;
-  transition: border-color .15s var(--ease), transform .15s var(--ease), background .15s var(--ease);
+  transition: border-color .15s var(--ease), background .15s var(--ease);
 }
 .links a:hover, .links a:focus-visible {
   border-color: var(--c);
   background: color-mix(in srgb, var(--c) 10%, var(--surface));
-  transform: translateY(-2px);
   outline: none;
 }
-.links a:active { transform: translateY(0); }
+.links a:active, .links a.opening { background: color-mix(in srgb, var(--c) 18%, var(--surface)); }
+.links a.opening, .links a.opening * { border-color: var(--c); transition: none; }
+.links a.opening .key img { filter: none; opacity: 1; }
+.links a.opening .key img.flip { filter: invert(1) hue-rotate(180deg); }
+.links a.opening .num,
+.links a.opening .key:not(.has-icon) { background: var(--c); border-color: var(--c); color: var(--bg); }
 
 .links .key {
+  position: relative;
   grid-row: span 2;
   display: grid;
   place-items: center;
@@ -327,6 +332,35 @@ body.has-wallpaper {
 }
 .links a:hover .key, .links a:focus-visible .key { background: var(--c); border-color: var(--c); color: var(--bg); }
 .links .key:empty::before { content: "·"; color: var(--muted); }
+
+/* Favicons stay grey until the tile is hovered or focused, so the theme leads. */
+.links .key img {
+  width: 18px;
+  height: 18px;
+  filter: grayscale(1);
+  opacity: .7;
+  transition: filter .15s, opacity .15s;
+}
+.links a:hover .key img, .links a:focus-visible .key img { filter: none; opacity: 1; }
+.links .key img.flip { filter: grayscale(1) invert(1); }
+.links a:hover .key img.flip, .links a:focus-visible .key img.flip { filter: invert(1) hue-rotate(180deg); }
+.links a:hover .key.has-icon, .links a:focus-visible .key.has-icon { background: transparent; }
+.links .num {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--c);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.links a:hover .num, .links a:focus-visible .num { background: var(--c); border-color: var(--c); color: var(--bg); }
 
 .links .label {
   color: var(--bright);
@@ -374,14 +408,46 @@ body.has-wallpaper {
 .settings::backdrop { background: color-mix(in srgb, var(--bg) 60%, rgb(0 0 0 / .5)); backdrop-filter: blur(4px); }
 .settings[open] { animation: rise .25s var(--ease) both; }
 
-.settings-inner { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.25rem; }
+.settings-inner { display: flex; flex-direction: column; gap: 1.75rem; padding: 0 1.25rem 1.25rem; }
 
-.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -1.25rem;
+  padding: .9rem 1.25rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
 .settings-head h2 { margin: 0; font-size: 14px; color: var(--bright); }
 .settings-head h2::before { content: "» "; color: var(--accent); }
 
 fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: .6rem; }
-legend { padding: 0; margin-bottom: .6rem; color: var(--muted); font-size: 12px; letter-spacing: .12em; }
+legend {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  width: 100%;
+  padding: 0;
+  margin-bottom: .75rem;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .12em;
+}
+legend::before { content: "//"; color: var(--accent); }
+legend::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+.sub { margin: .4rem 0 0; color: var(--fg); font-size: 12px; }
+
+.links-foot { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
+.links-foot .error { flex: 1; }
+.saved { margin: 0; color: var(--green); font-size: 12px; }
+.saved:empty { display: none; }
+
+.reset-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 
 .themes {
   display: grid;
@@ -427,7 +493,6 @@ legend { padding: 0; margin-bottom: .6rem; color: var(--muted); font-size: 12px;
 .help code { color: var(--fg); }
 .error { margin: 0; min-height: 1.2em; color: var(--red); font-size: 12px; }
 
-.settings-foot { display: flex; justify-content: flex-end; gap: .5rem; }
 .btn {
   min-height: 40px;
   padding: 0 1.2rem;

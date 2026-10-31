@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "A calm, keyboard-first Omarchy style new tab page.",
   "chrome_url_overrides": { "newtab": "src/newtab.html" },
-  "permissions": ["search", "storage"],
+  "permissions": ["search", "storage", "favicon"],
   "optional_permissions": ["history", "bookmarks", "tabs"],
   "icons": { "128": "assets/icon.png" }
 }

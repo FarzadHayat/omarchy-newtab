@@ -26,7 +26,7 @@ The hook also copies your wallpaper. Turn on **use your Omarchy wallpaper as the
 
 ## Keys
 
-`/` search, `1`-`9` open link (`Shift` for new tab), `[` `]` switch group, `t` next theme, `,` settings.
+Start typing anywhere to search. `1`-`9` open a link (`Shift` for a new tab), `[` `]` switch group, `,` settings, `/` jumps to search.
 
 Typing in search suggests matching links from every group. `Enter` opens the highlighted one, `Shift+Enter` in a new tab, arrow keys move. Turn on **open tabs**, **bookmarks** or **history** under suggestions in settings to also suggest from your browser; Chrome asks for permission the first time.
 

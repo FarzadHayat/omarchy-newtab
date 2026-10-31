@@ -101,6 +101,7 @@ function applyTheme(name) {
   const root = document.documentElement.style;
   for (const [k, v] of Object.entries(t)) if (v.startsWith("#")) root.setProperty(`--${k}`, v);
   document.documentElement.style.colorScheme = t.mode;
+  document.querySelectorAll(".links img").forEach((img) => img.complete && markLowContrast(img));
   $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system?.name || FALLBACK}` : name;
   document.querySelectorAll(".theme-opt").forEach((b) => b.setAttribute("aria-checked", b.dataset.theme === name));
 }
@@ -127,13 +128,6 @@ function applyWallpaper() {
   const on = state.wallpaper && system?.wallpaper;
   document.body.classList.toggle("has-wallpaper", Boolean(on));
   document.body.style.setProperty("--wallpaper", on ? `url("${system.wallpaper}")` : "none");
-}
-
-function cycleTheme() {
-  const names = [SYSTEM, ...Object.keys(THEMES)];
-  state.theme = names[(names.indexOf(state.theme) + 1) % names.length];
-  applyTheme(state.theme);
-  save();
 }
 
 function renderThemePicker() {
@@ -218,6 +212,36 @@ function parseLinks(text) {
 
 let groups = [];
 
+// Chrome serves favicons from its own cache, so nothing leaves the browser.
+function faviconUrl(href) {
+  if (!globalThis.chrome?.runtime?.id) return null;
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(href)}&size=32`);
+}
+
+// Average brightness (0-1) of an icon's visible pixels, so dark icons can be flipped on
+// dark themes (and light ones on light themes) instead of vanishing.
+function iconBrightness(img) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 16;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, 16, 16);
+  const px = ctx.getImageData(0, 0, 16, 16).data;
+  let sum = 0;
+  let weight = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    const a = px[i + 3] / 255;
+    sum += a * (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]);
+    weight += a;
+  }
+  return weight ? sum / weight / 255 : 0.5;
+}
+
+function markLowContrast(img) {
+  const b = iconBrightness(img);
+  const dark = document.documentElement.style.colorScheme !== "light";
+  img.classList.toggle("flip", dark ? b < 0.22 : b > 0.85);
+}
+
 function renderLinks() {
   groups = parseLinks(state.links).groups;
   if (state.group >= groups.length) state.group = 0;
@@ -257,7 +281,23 @@ function renderLinks() {
       const key = document.createElement("span");
       key.className = "key";
       key.setAttribute("aria-hidden", "true");
-      key.textContent = i < 9 ? i + 1 : "";
+      const icon = faviconUrl(link.href);
+      if (icon) {
+        const img = document.createElement("img");
+        img.src = icon;
+        img.alt = "";
+        img.addEventListener("load", () => markLowContrast(img));
+        key.classList.add("has-icon");
+        key.append(img);
+        if (i < 9) {
+          const num = document.createElement("span");
+          num.className = "num";
+          num.textContent = i + 1;
+          key.append(num);
+        }
+      } else {
+        key.textContent = i < 9 ? i + 1 : "";
+      }
       const label = document.createElement("span");
       label.className = "label";
       label.textContent = link.label;
@@ -540,6 +580,7 @@ function openSettings() {
   });
   $("set-links").value = state.links;
   $("links-error").textContent = "";
+  $("links-saved").textContent = "";
   dialog.showModal();
 }
 
@@ -555,14 +596,26 @@ $("save").addEventListener("click", () => {
     return;
   }
   $("set-links").removeAttribute("aria-invalid");
-  state.name = $("set-name").value.trim();
-  state.clock = $("set-clock").value;
+  $("links-error").textContent = "";
   state.links = text;
   save();
   renderLinks();
+  $("links-saved").textContent = "saved";
+});
+
+$("set-links").addEventListener("input", () => ($("links-saved").textContent = ""));
+
+$("set-name").addEventListener("input", (e) => {
+  state.name = e.target.value.trim();
+  save();
   updatePrompt();
   tick();
-  dialog.close();
+});
+
+$("set-clock").addEventListener("change", (e) => {
+  state.clock = e.target.value;
+  save();
+  tick();
 });
 
 $("set-wallpaper").addEventListener("change", (e) => {
@@ -606,31 +659,36 @@ function updatePrompt() {
 document.addEventListener("keydown", (e) => {
   if (dialog.open || e.ctrlKey || e.metaKey || e.altKey) return;
   const typing = e.target.closest("input, textarea, select");
-  if (typing) {
-    if (e.key === "Escape") {
-      e.target.value = "";
-      e.target.blur();
-    }
+  // An empty search box still passes shortcuts through, since new tabs can start in it.
+  const emptySearch = e.target === q && !q.value;
+  if (typing && e.key === "Escape") {
+    e.target.value = "";
+    e.target.blur();
     return;
   }
-  if (e.key === "/") {
+  if (typing && !emptySearch) return;
+  if (e.key === "/" && !typing) {
     e.preventDefault();
-    $("q").focus();
+    q.focus();
   } else if (/^Digit[1-9]$/.test(e.code)) {
     const a = $("links").querySelectorAll("a")[Number(e.code.at(-1)) - 1];
     if (a) {
       e.preventDefault();
-      e.shiftKey ? window.open(a.href, "_blank") : a.click();
+      // Light the tile first so it's clear which link the number picked.
+      const newTab = e.shiftKey;
+      a.classList.add("opening");
+      setTimeout(() => (newTab ? window.open(a.href, "_blank") : a.click()), 150);
+      setTimeout(() => a.classList.remove("opening"), 500);
     }
-  } else if (e.key === "]" || e.key === "l") {
-    showGroup(state.group + 1);
-  } else if (e.key === "[" || e.key === "h") {
-    showGroup(state.group - 1);
-  } else if (e.key === "t") {
-    cycleTheme();
+  } else if (e.key === "]" || e.key === "[") {
+    e.preventDefault();
+    showGroup(state.group + (e.key === "]" ? 1 : -1));
   } else if (e.key === ",") {
     e.preventDefault();
     openSettings();
+  } else if (!typing && /^\S$/u.test(e.key)) {
+    // Any other character starts a search; focusing now lets the key land in the box.
+    q.focus();
   }
 });
 
