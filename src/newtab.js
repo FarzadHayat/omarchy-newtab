@@ -39,7 +39,7 @@ Stack Overflow | https://stackoverflow.com`;
 
 const SYSTEM = "omarchy";
 const FALLBACK = "osaka-jade";
-const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", wallpaper: false, focusSearch: false, links: DEFAULT_LINKS, group: 0 };
+const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", wallpaper: false, focusSearch: true, links: DEFAULT_LINKS, group: 0 };
 const ACCENTS = ["accent", "cyan", "magenta", "yellow", "green", "red"];
 
 const $ = (id) => document.getElementById(id);
@@ -70,7 +70,9 @@ function load() {
   const saved = readJSON("omarchy-newtab") || {};
   // Settings saved before the Omarchy theme existed start following the system theme.
   if (!saved.v) delete saved.theme;
-  return { ...DEFAULTS, ...saved, v: 2 };
+  // Starting in the search box became the default in v3, so the shortcuts work right away.
+  if (!(saved.v >= 3)) delete saved.focusSearch;
+  return { ...DEFAULTS, ...saved, v: 3 };
 }
 
 function save() {
