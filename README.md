@@ -2,6 +2,8 @@
 
 # Omarchy New Tab
 
+[![Built for Omarchy](https://raw.githubusercontent.com/tcballard/omarchy-badges/85f859029e236e784e7b05ada6dbe73506d07a91/badges/v1/built-for-omarchy.svg)](https://github.com/tcballard/omarchy-badges)
+
 A calm, keyboard-first new tab page for Chrome and Chromium that matches your [Omarchy](https://omarchy.org) theme.
 
 ![Omarchy New Tab in the Thunderstruck theme](assets/screenshot.png)
