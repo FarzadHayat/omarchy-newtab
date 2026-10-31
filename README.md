@@ -4,7 +4,7 @@
 
 A calm, keyboard-first new tab page for Chrome and Chromium that matches your [Omarchy](https://omarchy.org) theme.
 
-![Omarchy New Tab in the Tokyo Night theme](assets/screenshot.png)
+![Omarchy New Tab in the Thunderstruck theme](assets/screenshot.png)
 
 ## What you get
 
