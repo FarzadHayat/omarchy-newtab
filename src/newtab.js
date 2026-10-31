@@ -23,6 +23,7 @@ Gmail | https://mail.google.com
 Calendar | https://calendar.google.com
 Claude | https://claude.ai
 Hacker News | https://news.ycombinator.com
+X | https://x.com
 
 # omarchy
 Manual | https://learn.omacom.io/2/the-omarchy-manual
