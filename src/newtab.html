@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>New Tab</title>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <header class="bar" aria-label="Status bar">
+    <div class="bar-left">
+      <svg class="logo" id="logo-small" viewBox="0 0 54 52" aria-hidden="true"></svg>
+      <nav class="workspaces" id="workspaces" aria-label="Link groups"></nav>
+    </div>
+    <div class="bar-center" id="bar-date" aria-hidden="true"></div>
+    <div class="bar-right">
+      <span class="bar-theme" id="bar-theme"></span>
+      <button class="icon-btn" id="open-settings" type="button" aria-label="Settings" title="Settings (,)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="hero">
+      <svg class="logo logo-big" id="logo-big" viewBox="0 0 54 52" role="img" aria-label="Omarchy"></svg>
+      <div class="hero-text">
+        <time class="clock" id="clock" aria-live="off"></time>
+        <p class="greeting" id="greeting"></p>
+      </div>
+    </section>
+
+    <form class="search" id="search" role="search">
+      <label class="prompt" for="q" aria-hidden="true"><span class="prompt-user" id="prompt-user">~</span><span class="prompt-sym">❯</span></label>
+      <input id="q" name="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="search or type a url" aria-label="Search the web or enter an address">
+      <kbd class="hint" aria-hidden="true">/</kbd>
+    </form>
+
+    <section class="links-wrap" aria-labelledby="group-title">
+      <h2 class="group-title" id="group-title"></h2>
+      <ul class="links" id="links"></ul>
+    </section>
+  </main>
+
+  <footer class="keys" aria-label="Keyboard shortcuts">
+    <span><kbd>/</kbd> search</span>
+    <span><kbd>1</kbd>-<kbd>9</kbd> open</span>
+    <span><kbd>[</kbd> <kbd>]</kbd> group</span>
+    <span><kbd>t</kbd> theme</span>
+    <span><kbd>,</kbd> settings</span>
+  </footer>
+
+  <dialog class="settings" id="settings" aria-labelledby="settings-title">
+    <form method="dialog" class="settings-inner" id="settings-form">
+      <header class="settings-head">
+        <h2 id="settings-title">settings</h2>
+        <button class="icon-btn" value="cancel" type="submit" aria-label="Close settings">✕</button>
+      </header>
+
+      <fieldset>
+        <legend>theme</legend>
+        <div class="themes" id="theme-list" role="radiogroup" aria-label="Theme"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>you</legend>
+        <label class="field">
+          <span>name</span>
+          <input id="set-name" type="text" autocomplete="off" placeholder="optional">
+        </label>
+        <label class="field">
+          <span>clock</span>
+          <select id="set-clock">
+            <option value="24">24 hour</option>
+            <option value="12">12 hour</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>links</legend>
+        <p class="help" id="links-help">One group per block. First line <code># group name</code>, then <code>label | url</code> per line.</p>
+        <textarea id="set-links" rows="12" spellcheck="false" aria-describedby="links-help links-error"></textarea>
+        <p class="error" id="links-error" role="alert"></p>
+      </fieldset>
+
+      <footer class="settings-foot">
+        <button type="button" class="btn ghost" id="reset">reset</button>
+        <button type="button" class="btn" id="save">save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="themes.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>
