@@ -1,33 +1,47 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# omarchy-newtab
+# Omarchy New Tab
 
-Created in [T3 Code](https://t3.codes).
+A calm, keyboard-first new tab page for Chrome and Chromium that matches your [Omarchy](https://omarchy.org) theme.
 
-An Omarchy style new tab page for Chrome and Chromium.
+![Omarchy New Tab in the Tokyo Night theme](assets/screenshot.png)
+
+## What you get
+
+- Your Omarchy theme, kept in sync when you switch themes. You can also pick from 11 built-in themes.
+- Your Omarchy wallpaper as the background, if you want it.
+- A search box that finds your links, open tabs, bookmarks and history as you type.
+- Link groups you can open with a single key.
 
 ## Install
 
-1. Open `chrome://extensions` and turn on **Developer mode**.
-2. Click **Load unpacked** and pick this folder.
-3. Open a new tab.
-
-## Follow the Omarchy theme
-
-The **omarchy (system)** theme follows your desktop theme, including tabs that are already open. A theme-set hook runs `bin/sync-omarchy-theme` to copy the current colors into the extension:
-
 ```bash
-omarchy hook install theme-set bin/sync-omarchy-theme
+git clone https://github.com/FarzadHayat/omarchy-newtab.git
+cd omarchy-newtab
+bin/install
 ```
 
-Pick any other theme in settings to override it.
+Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `omarchy-newtab` folder.
 
-The hook also copies your wallpaper. Turn on **use your Omarchy wallpaper as the background** in settings to show it, dimmed, behind the page. It updates when the theme changes, not when you only cycle backgrounds.
+`bin/install` sets things up so the page follows your Omarchy theme and wallpaper. If you move the folder, run it again.
 
-## Keys
+## Using it
 
-Start typing anywhere to search. `1`-`9` open a link (`Shift` for a new tab), `[` `]` switch group, `,` settings, `/` jumps to search.
+- **Just start typing** to search. `Enter` opens the top match. `Shift+Enter` opens it in a new tab.
+- **`1` to `9`** open the links on screen.
+- **`[` and `]`** switch between link groups.
+- **`,`** opens settings. That's where you edit your links, change the theme, and turn on the wallpaper or browser suggestions.
 
-Typing in search suggests matching links from every group. `Enter` opens the highlighted one, `Shift+Enter` in a new tab, arrow keys move. Turn on **open tabs**, **bookmarks** or **history** under suggestions in settings to also suggest from your browser; Chrome asks for permission the first time.
+## Good to know
 
-Chrome puts the cursor in the address bar on new tabs. Turn on **put the cursor in search on new tabs** in settings to start in the search box instead. The address bar then shows the extension's address; press `Ctrl+L` to type there.
+- Chrome puts your cursor in the address bar on new tabs. If you'd rather start in the search box, turn that on in settings. The address bar will then show the extension's address.
+- Link icons come from Chrome's own cache. A site you haven't visited yet shows a plain globe until you do.
+- A search that starts with a number opens that link instead. To search for something like "1password", click the search box and type a space first.
+
+## Remove it
+
+Run `bin/install --uninstall`, then remove the extension from `chrome://extensions`.
+
+## License
+
+[MIT](LICENSE)

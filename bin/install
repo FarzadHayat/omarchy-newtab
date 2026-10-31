@@ -1,0 +1,71 @@
+#!/bin/bash
+# Keep the new tab in step with Omarchy: re-sync colors and wallpaper whenever the
+# theme or background changes. Run again after moving this folder.
+# Usage: bin/install [--uninstall]
+set -euo pipefail
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+sync="$repo/bin/sync-omarchy-theme"
+hook="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-newtab-sync"
+units="$HOME/.config/systemd/user"
+name="omarchy-newtab-sync"
+
+# Write paths relative to home when possible, so the files read the same on every machine.
+home_path="${sync/#$HOME/\$HOME}"
+unit_path="${sync/#$HOME/%h}"
+
+if [[ ${1:-} == "--uninstall" ]]; then
+  systemctl --user disable --now "$name.path" 2>/dev/null || true
+  rm -f "$hook" "$units/$name.path" "$units/$name.service"
+  systemctl --user daemon-reload
+  echo "Removed the Omarchy New Tab theme sync."
+  exit 0
+fi
+
+mkdir -p "$(dirname "$hook")" "$units"
+
+# Theme changes: Omarchy runs this hook after switching themes.
+cat >"$hook" <<EOF
+#!/bin/bash
+# Omarchy theme-set hook from Omarchy New Tab: copy the new theme's colors into
+# the extension so open and new tabs follow the system theme.
+
+bin="$home_path"
+[[ -x \$bin ]] || exit 0
+
+"\$bin" || notify-send -u low "Omarchy New Tab" "Couldn't sync the theme colors."
+EOF
+chmod 755 "$hook"
+
+# Wallpaper changes: Omarchy has no hook for these, so watch the folder holding the
+# current background link.
+cat >"$units/$name.path" <<EOF
+[Unit]
+Description=Sync Omarchy New Tab when the Omarchy theme or wallpaper changes
+
+[Path]
+PathChanged=%h/.local/state/omarchy/current
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat >"$units/$name.service" <<EOF
+[Unit]
+Description=Copy Omarchy theme colors and wallpaper into Omarchy New Tab
+# Skip quietly on machines where this folder isn't present.
+ConditionPathExists=$unit_path
+
+[Service]
+Type=oneshot
+ExecStart=$unit_path
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now "$name.path"
+"$sync"
+
+cat <<EOF
+Theme sync is on. Last step: open chrome://extensions, turn on Developer mode,
+click "Load unpacked" and pick $repo
+EOF

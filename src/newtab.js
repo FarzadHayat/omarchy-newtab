@@ -103,7 +103,10 @@ function applyTheme(name) {
   document.documentElement.style.colorScheme = t.mode;
   document.querySelectorAll(".links img").forEach((img) => img.complete && markLowContrast(img));
   $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system?.name || FALLBACK}` : name;
-  document.querySelectorAll(".theme-opt").forEach((b) => b.setAttribute("aria-checked", b.dataset.theme === name));
+  document.querySelectorAll(".theme-opt").forEach((b) => {
+    b.setAttribute("aria-checked", b.dataset.theme === name);
+    b.tabIndex = b.dataset.theme === name ? 0 : -1;
+  });
 }
 
 // The Omarchy theme-set hook writes the live system colors to omarchy-theme.json.
@@ -141,6 +144,8 @@ function renderThemePicker() {
       b.role = "radio";
       b.dataset.theme = name;
       b.setAttribute("aria-checked", name === state.theme);
+      // One tab stop for the group; arrow keys move between themes.
+      b.tabIndex = name === state.theme ? 0 : -1;
       b.innerHTML = `<span class="swatch" aria-hidden="true">${[t.bg, t.fg, t.accent, t.cyan, t.magenta, t.yellow]
         .map((c) => `<i style="background:${c}"></i>`).join("")}</span><span class="theme-name">${name === SYSTEM ? "omarchy (system)" : name}</span>`;
       b.addEventListener("click", () => {
@@ -152,6 +157,16 @@ function renderThemePicker() {
     }),
   );
 }
+
+$("theme-list").addEventListener("keydown", (e) => {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const opts = [...document.querySelectorAll(".theme-opt")];
+  const next = opts[(opts.indexOf(e.target.closest(".theme-opt")) + step + opts.length) % opts.length];
+  next.click();
+  next.focus();
+});
 
 // ---------- clock ----------
 
