@@ -29,3 +29,5 @@ The hook also copies your wallpaper. Turn on **use your Omarchy wallpaper as the
 `/` search, `1`-`9` open link (`Shift` for new tab), `[` `]` switch group, `t` next theme, `,` settings.
 
 Typing in search suggests matching links from every group. `Enter` opens the highlighted one, `Shift+Enter` in a new tab, arrow keys move.
+
+Chrome puts the cursor in the address bar on new tabs. Turn on **put the cursor in search on new tabs** in settings to start in the search box instead. The address bar then shows the extension's address; press `Ctrl+L` to type there.

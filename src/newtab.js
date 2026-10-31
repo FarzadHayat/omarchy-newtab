@@ -39,7 +39,7 @@ Stack Overflow | https://stackoverflow.com`;
 
 const SYSTEM = "omarchy";
 const FALLBACK = "osaka-jade";
-const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", wallpaper: false, links: DEFAULT_LINKS, group: 0 };
+const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", wallpaper: false, focusSearch: false, links: DEFAULT_LINKS, group: 0 };
 const ACCENTS = ["accent", "cyan", "magenta", "yellow", "green", "red"];
 
 const $ = (id) => document.getElementById(id);
@@ -64,6 +64,18 @@ function load() {
 
 function save() {
   localStorage.setItem("omarchy-newtab", JSON.stringify(state));
+}
+
+// Chrome keeps focus in the address bar on its new tab page, even after the page
+// navigates. A tab opened by the extension starts with the page focused, so swap
+// this tab for one of those.
+const FOCUS_QUERY = "?focus";
+if (state.focusSearch && location.search !== FOCUS_QUERY && globalThis.chrome?.tabs) {
+  chrome.tabs.getCurrent((tab) => {
+    if (!tab) return;
+    const url = chrome.runtime.getURL(`src/newtab.html${FOCUS_QUERY}`);
+    chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true }, () => chrome.tabs.remove(tab.id));
+  });
 }
 
 // ---------- logo ----------
@@ -415,6 +427,7 @@ function openSettings() {
   $("set-name").value = state.name;
   $("set-clock").value = state.clock;
   $("set-wallpaper").checked = state.wallpaper;
+  $("set-focus").checked = state.focusSearch;
   $("set-links").value = state.links;
   $("links-error").textContent = "";
   dialog.showModal();
@@ -445,6 +458,11 @@ $("save").addEventListener("click", () => {
 $("set-wallpaper").addEventListener("change", (e) => {
   state.wallpaper = e.target.checked;
   applyWallpaper();
+  save();
+});
+
+$("set-focus").addEventListener("change", (e) => {
+  state.focusSearch = e.target.checked;
   save();
 });
 
@@ -508,6 +526,7 @@ renderLinks();
 updatePrompt();
 tick();
 setInterval(tick, 1000);
+if (location.search === FOCUS_QUERY) q.focus();
 syncSystemTheme();
 setInterval(() => document.visibilityState === "visible" && syncSystemTheme(), 2000);
 document.addEventListener("visibilitychange", syncSystemTheme);
