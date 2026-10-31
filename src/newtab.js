@@ -301,6 +301,7 @@ const q = $("q");
 const list = $("suggestions");
 let suggestions = [];
 let selected = 0;
+let moved = false;
 
 // Every letter of the query must appear in order; earlier, tighter matches rank higher.
 function fuzzy(query, text) {
@@ -318,7 +319,66 @@ function fuzzy(query, text) {
   return { score: gaps + hits[0] * 2, hits };
 }
 
-function buildSuggestions(query) {
+// Browser sources the user has granted; Chrome is the source of truth.
+const SOURCES = ["tabs", "bookmarks", "history"];
+const granted = new Set();
+let queryId = 0;
+
+async function loadGranted() {
+  if (!globalThis.chrome?.permissions) return;
+  const { permissions = [] } = await chrome.permissions.getAll();
+  granted.clear();
+  permissions.filter((p) => SOURCES.includes(p)).forEach((p) => granted.add(p));
+}
+
+const ownPage = (url) => !url || url.startsWith("chrome://newtab") || url.startsWith(location.origin);
+const hostOf = (url) => {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+};
+const words = (query) => query.toLowerCase().split(/\s+/).filter(Boolean);
+const matchesAll = (query, text) => words(query).every((w) => text.toLowerCase().includes(w));
+
+async function browserSuggestions(query) {
+  const jobs = [];
+  if (granted.has("tabs")) {
+    jobs.push(
+      chrome.tabs.query({}).then((tabs) =>
+        tabs
+          .filter((t) => !ownPage(t.url) && matchesAll(query, `${t.title} ${t.url}`))
+          .slice(0, 3)
+          .map((t) => ({ kind: "tab", label: t.title || t.url, href: t.url, tabId: t.id, windowId: t.windowId })),
+      ),
+    );
+  }
+  if (granted.has("bookmarks")) {
+    jobs.push(
+      chrome.bookmarks.search(query).then((marks) =>
+        marks
+          .filter((b) => b.url)
+          .slice(0, 3)
+          .map((b) => ({ kind: "bookmark", label: b.title || b.url, href: b.url })),
+      ),
+    );
+  }
+  if (granted.has("history")) {
+    jobs.push(
+      chrome.history.search({ text: query, startTime: 0, maxResults: 25 }).then((items) =>
+        items
+          .filter((h) => !ownPage(h.url))
+          .sort((a, b) => b.typedCount - a.typedCount || b.visitCount - a.visitCount)
+          .slice(0, 5)
+          .map((h) => ({ kind: "history", label: h.title || h.url, href: h.url })),
+      ),
+    );
+  }
+  return (await Promise.allSettled(jobs)).flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+}
+
+function buildSuggestions(query, extra = []) {
   if (!query) return [];
   const links = groups
     .flatMap((g) => g.links.map((link) => ({ ...link, group: g.name })))
@@ -332,8 +392,26 @@ function buildSuggestions(query) {
     .sort((a, b) => a.score - b.score)
     .slice(0, 6);
   const url = URL_LIKE.test(query) ? [{ kind: "url", label: query, href: toUrl(query) }] : [];
-  return [...url, ...links, { kind: "search", label: `search "${query}"`, q: query }];
+
+  // Drop browser results that repeat a saved link or each other.
+  const seen = new Set([...url, ...links].map((r) => r.href.replace(/\/$/, "")));
+  const fresh = extra.filter((r) => {
+    const key = r.href.replace(/\/$/, "");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // Like Chrome's autocomplete, a site whose address starts with the query beats a web search.
+  const q0 = query.toLowerCase();
+  // History is already sorted by visits, so it gets first pick.
+  const strong = url.length
+    ? []
+    : ["history", "bookmark"].flatMap((kind) => fresh.filter((r) => r.kind === kind && hostOf(r.href).startsWith(q0))).slice(0, 1);
+  const rest = fresh.filter((r) => !strong.includes(r)).slice(0, 6);
+  return [...url, ...links, ...strong, { kind: "search", label: `search "${query}"`, q: query }, ...rest];
 }
+
+const KIND_LABEL = { url: "open", search: "web", tab: "switch to tab", bookmark: "bookmark", history: "history" };
 
 function renderSuggestions() {
   const open = suggestions.length > 0;
@@ -356,7 +434,13 @@ function renderSuggestions() {
       });
       const kind = document.createElement("span");
       kind.className = "sug-kind";
-      kind.textContent = r.kind === "link" ? r.group : r.kind === "url" ? "open" : "web";
+      kind.textContent = r.kind === "link" ? r.group : KIND_LABEL[r.kind];
+      if (r.kind === "tab" || r.kind === "bookmark" || r.kind === "history") {
+        const host = document.createElement("span");
+        host.className = "sug-url";
+        host.textContent = hostOf(r.href);
+        label.append(host);
+      }
       li.append(label, kind);
       // mousedown keeps focus in the input so the list doesn't close first.
       li.addEventListener("mousedown", (e) => e.preventDefault());
@@ -370,6 +454,7 @@ function renderSuggestions() {
 
 function select(i) {
   if (!suggestions.length) return;
+  moved = true;
   selected = (i + suggestions.length) % suggestions.length;
   list.querySelectorAll("[role=option]").forEach((el, j) => el.setAttribute("aria-selected", j === selected));
   q.setAttribute("aria-activedescendant", `sug-${selected}`);
@@ -384,6 +469,7 @@ function closeSuggestions() {
 function choose(r, newTab = false) {
   if (!r) return;
   if (r.kind === "search") return searchWeb(r.q);
+  if (r.kind === "tab" && !newTab) return switchToTab(r);
   if (newTab) {
     window.open(r.href, "_blank");
     q.value = "";
@@ -393,9 +479,29 @@ function choose(r, newTab = false) {
   }
 }
 
-q.addEventListener("input", () => {
-  suggestions = buildSuggestions(q.value.trim());
+// Jump to the open tab and close this new tab, like Chrome's "switch to tab".
+async function switchToTab(r) {
+  await chrome.tabs.update(r.tabId, { active: true });
+  await chrome.windows.update(r.windowId, { focused: true });
+  const self = await chrome.tabs.getCurrent();
+  if (self) chrome.tabs.remove(self.id);
+}
+
+q.addEventListener("input", async () => {
+  const query = q.value.trim();
+  const id = ++queryId;
+  suggestions = buildSuggestions(query);
   selected = 0;
+  moved = false;
+  renderSuggestions();
+  if (!query || !granted.size) return;
+  const extra = await browserSuggestions(query);
+  // Ignore answers for a query the user has already typed past.
+  if (id !== queryId || q.value.trim() !== query) return;
+  // Keep the user's arrow-key choice; otherwise highlight the new top result.
+  const current = suggestions[selected];
+  suggestions = buildSuggestions(query, extra);
+  selected = moved ? Math.max(0, suggestions.findIndex((r) => r.label === current?.label && r.kind === current?.kind)) : 0;
   renderSuggestions();
 });
 
@@ -428,6 +534,10 @@ function openSettings() {
   $("set-clock").value = state.clock;
   $("set-wallpaper").checked = state.wallpaper;
   $("set-focus").checked = state.focusSearch;
+  document.querySelectorAll("[data-source]").forEach((box) => {
+    box.checked = granted.has(box.dataset.source);
+    box.disabled = !globalThis.chrome?.permissions;
+  });
   $("set-links").value = state.links;
   $("links-error").textContent = "";
   dialog.showModal();
@@ -460,6 +570,15 @@ $("set-wallpaper").addEventListener("change", (e) => {
   applyWallpaper();
   save();
 });
+
+document.querySelectorAll("[data-source]").forEach((box) =>
+  box.addEventListener("change", async () => {
+    const permissions = [box.dataset.source];
+    if (box.checked) box.checked = await chrome.permissions.request({ permissions });
+    else await chrome.permissions.remove({ permissions });
+    await loadGranted();
+  }),
+);
 
 $("set-focus").addEventListener("change", (e) => {
   state.focusSearch = e.target.checked;
@@ -526,6 +645,7 @@ renderLinks();
 updatePrompt();
 tick();
 setInterval(tick, 1000);
+loadGranted();
 if (location.search === FOCUS_QUERY) q.focus();
 syncSystemTheme();
 setInterval(() => document.visibilityState === "visible" && syncSystemTheme(), 2000);

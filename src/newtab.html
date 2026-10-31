@@ -91,6 +91,16 @@
       </fieldset>
 
       <fieldset>
+        <legend>suggestions</legend>
+        <p class="help" id="sources-help">Also suggest from your browser while you type. Chrome asks for permission the first time.</p>
+        <div class="sources" role="group" aria-describedby="sources-help">
+          <label class="check"><input type="checkbox" data-source="tabs"><span>open tabs</span></label>
+          <label class="check"><input type="checkbox" data-source="bookmarks"><span>bookmarks</span></label>
+          <label class="check"><input type="checkbox" data-source="history"><span>history</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>links</legend>
         <p class="help" id="links-help">One group per block. First line <code># group name</code>, then <code>label | url</code> per line.</p>
         <textarea id="set-links" rows="12" spellcheck="false" aria-describedby="links-help links-error"></textarea>
