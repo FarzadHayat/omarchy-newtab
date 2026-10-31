@@ -204,6 +204,63 @@ kbd {
 .search:focus-within .hint { opacity: 0; }
 .hint { transition: opacity .2s; }
 
+.search { position: relative; z-index: 5; }
+
+.suggestions {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + var(--border));
+  left: calc(-1 * var(--border));
+  right: calc(-1 * var(--border));
+  margin: 0;
+  padding: .35rem 0;
+  list-style: none;
+  max-height: min(340px, 50vh);
+  overflow-y: auto;
+  background: var(--surface);
+  border: var(--border) solid var(--accent);
+  border-top-color: var(--line);
+  box-shadow: 0 24px 50px -20px rgb(0 0 0 / .55);
+}
+.suggestions[hidden] { display: none; }
+.suggestions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .55rem 1rem;
+  cursor: pointer;
+}
+.suggestions li:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.suggestions li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--bright);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.sug-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sug-label mark { background: none; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.sug-kind { flex: none; color: var(--muted); font-size: 12px; }
+
+/* ---------- wallpaper ---------- */
+
+body.has-wallpaper {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 88%, transparent)),
+    var(--wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-height: 40px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings .check input { width: 18px; min-height: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+
 /* ---------- links ---------- */
 
 .links-wrap { animation: rise .6s .16s var(--ease) both; }

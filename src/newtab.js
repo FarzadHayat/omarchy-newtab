@@ -39,7 +39,7 @@ Stack Overflow | https://stackoverflow.com`;
 
 const SYSTEM = "omarchy";
 const FALLBACK = "osaka-jade";
-const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", links: DEFAULT_LINKS, group: 0 };
+const DEFAULTS = { theme: SYSTEM, name: "", clock: "24", wallpaper: false, links: DEFAULT_LINKS, group: 0 };
 const ACCENTS = ["accent", "cyan", "magenta", "yellow", "green", "red"];
 
 const $ = (id) => document.getElementById(id);
@@ -87,7 +87,7 @@ function palette(name) {
 function applyTheme(name) {
   const t = palette(name);
   const root = document.documentElement.style;
-  for (const [k, v] of Object.entries(t)) if (k !== "mode" && k !== "name") root.setProperty(`--${k}`, v);
+  for (const [k, v] of Object.entries(t)) if (v.startsWith("#")) root.setProperty(`--${k}`, v);
   document.documentElement.style.colorScheme = t.mode;
   $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system?.name || FALLBACK}` : name;
   document.querySelectorAll(".theme-opt").forEach((b) => b.setAttribute("aria-checked", b.dataset.theme === name));
@@ -108,6 +108,13 @@ async function syncSystemTheme() {
   localStorage.setItem("omarchy-newtab-system", JSON.stringify(system));
   renderThemePicker();
   if (state.theme === SYSTEM) applyTheme(SYSTEM);
+  applyWallpaper();
+}
+
+function applyWallpaper() {
+  const on = state.wallpaper && system?.wallpaper;
+  document.body.classList.toggle("has-wallpaper", Boolean(on));
+  document.body.style.setProperty("--wallpaper", on ? `url("${system.wallpaper}")` : "none");
 }
 
 function cycleTheme() {
@@ -264,17 +271,140 @@ function showGroup(i) {
 
 const URL_LIKE = /^(https?:\/\/)?(localhost|[\w-]+(\.[\w-]+)+|\d{1,3}(\.\d{1,3}){3})(:\d+)?([/?#]\S*)?$/i;
 
-$("search").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const q = $("q").value.trim();
-  if (!q) return;
-  if (URL_LIKE.test(q)) {
-    location.href = /^https?:\/\//i.test(q) ? q : `${/^(localhost|\d)/.test(q) ? "http" : "https"}://${q}`;
-  } else if (globalThis.chrome?.search?.query) {
+function toUrl(q) {
+  return /^https?:\/\//i.test(q) ? q : `${/^(localhost|\d)/.test(q) ? "http" : "https"}://${q}`;
+}
+
+function searchWeb(q) {
+  if (globalThis.chrome?.search?.query) {
     chrome.search.query({ text: q, disposition: "CURRENT_TAB" });
   } else {
     location.href = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
   }
+}
+
+// ---------- suggestions ----------
+
+const q = $("q");
+const list = $("suggestions");
+let suggestions = [];
+let selected = 0;
+
+// Every letter of the query must appear in order; earlier, tighter matches rank higher.
+function fuzzy(query, text) {
+  const t = text.toLowerCase();
+  let pos = -1;
+  let gaps = 0;
+  const hits = [];
+  for (const ch of query.toLowerCase()) {
+    const next = t.indexOf(ch, pos + 1);
+    if (next === -1) return null;
+    gaps += next - pos - 1;
+    hits.push(next);
+    pos = next;
+  }
+  return { score: gaps + hits[0] * 2, hits };
+}
+
+function buildSuggestions(query) {
+  if (!query) return [];
+  const links = groups
+    .flatMap((g) => g.links.map((link) => ({ ...link, group: g.name })))
+    .map((link) => {
+      const byLabel = fuzzy(query, link.label);
+      const byHost = byLabel ? null : fuzzy(query, new URL(link.href).host);
+      const m = byLabel || byHost;
+      return m && { kind: "link", ...link, score: m.score + (byHost ? 50 : 0), hits: byLabel?.hits || [] };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 6);
+  const url = URL_LIKE.test(query) ? [{ kind: "url", label: query, href: toUrl(query) }] : [];
+  return [...url, ...links, { kind: "search", label: `search "${query}"`, q: query }];
+}
+
+function renderSuggestions() {
+  const open = suggestions.length > 0;
+  list.hidden = !open;
+  q.setAttribute("aria-expanded", open);
+  list.replaceChildren(
+    ...suggestions.map((r, i) => {
+      const li = document.createElement("li");
+      li.id = `sug-${i}`;
+      li.role = "option";
+      li.setAttribute("aria-selected", i === selected);
+      const label = document.createElement("span");
+      label.className = "sug-label";
+      [...r.label].forEach((ch, j) => {
+        if (r.hits?.includes(j)) {
+          const m = document.createElement("mark");
+          m.textContent = ch;
+          label.append(m);
+        } else label.append(ch);
+      });
+      const kind = document.createElement("span");
+      kind.className = "sug-kind";
+      kind.textContent = r.kind === "link" ? r.group : r.kind === "url" ? "open" : "web";
+      li.append(label, kind);
+      // mousedown keeps focus in the input so the list doesn't close first.
+      li.addEventListener("mousedown", (e) => e.preventDefault());
+      li.addEventListener("click", (e) => choose(r, e.shiftKey || e.ctrlKey || e.metaKey));
+      return li;
+    }),
+  );
+  if (open) q.setAttribute("aria-activedescendant", `sug-${selected}`);
+  else q.removeAttribute("aria-activedescendant");
+}
+
+function select(i) {
+  if (!suggestions.length) return;
+  selected = (i + suggestions.length) % suggestions.length;
+  list.querySelectorAll("[role=option]").forEach((el, j) => el.setAttribute("aria-selected", j === selected));
+  q.setAttribute("aria-activedescendant", `sug-${selected}`);
+  $(`sug-${selected}`).scrollIntoView({ block: "nearest" });
+}
+
+function closeSuggestions() {
+  suggestions = [];
+  renderSuggestions();
+}
+
+function choose(r, newTab = false) {
+  if (!r) return;
+  if (r.kind === "search") return searchWeb(r.q);
+  if (newTab) {
+    window.open(r.href, "_blank");
+    q.value = "";
+    closeSuggestions();
+  } else {
+    location.href = r.href;
+  }
+}
+
+q.addEventListener("input", () => {
+  suggestions = buildSuggestions(q.value.trim());
+  selected = 0;
+  renderSuggestions();
+});
+
+q.addEventListener("keydown", (e) => {
+  if (list.hidden) return;
+  if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) select(selected + 1);
+  else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) select(selected - 1);
+  else if (e.key === "Enter") choose(suggestions[selected], e.shiftKey);
+  else if (e.key === "Escape") closeSuggestions();
+  else return;
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+q.addEventListener("blur", closeSuggestions);
+
+$("search").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const query = q.value.trim();
+  if (!query) return;
+  URL_LIKE.test(query) ? (location.href = toUrl(query)) : searchWeb(query);
 });
 
 // ---------- settings ----------
@@ -284,6 +414,7 @@ const dialog = $("settings");
 function openSettings() {
   $("set-name").value = state.name;
   $("set-clock").value = state.clock;
+  $("set-wallpaper").checked = state.wallpaper;
   $("set-links").value = state.links;
   $("links-error").textContent = "";
   dialog.showModal();
@@ -311,11 +442,18 @@ $("save").addEventListener("click", () => {
   dialog.close();
 });
 
+$("set-wallpaper").addEventListener("change", (e) => {
+  state.wallpaper = e.target.checked;
+  applyWallpaper();
+  save();
+});
+
 $("reset").addEventListener("click", () => {
   if (!confirm("Reset links, name and theme to defaults?")) return;
   Object.assign(state, DEFAULTS);
   save();
   applyTheme(state.theme);
+  applyWallpaper();
   renderLinks();
   updatePrompt();
   tick();
@@ -365,6 +503,7 @@ drawLogo($("logo-small"));
 drawLogo($("logo-big"));
 renderThemePicker();
 applyTheme(state.theme);
+applyWallpaper();
 renderLinks();
 updatePrompt();
 tick();

@@ -22,6 +22,10 @@ omarchy hook install theme-set bin/sync-omarchy-theme
 
 Pick any other theme in settings to override it.
 
+The hook also copies your wallpaper. Turn on **use your Omarchy wallpaper as the background** in settings to show it, dimmed, behind the page. It updates when the theme changes, not when you only cycle backgrounds.
+
 ## Keys
 
 `/` search, `1`-`9` open link (`Shift` for new tab), `[` `]` switch group, `t` next theme, `,` settings.
+
+Typing in search suggests matching links from every group. `Enter` opens the highlighted one, `Shift+Enter` in a new tab, arrow keys move.

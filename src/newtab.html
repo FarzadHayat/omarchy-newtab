@@ -33,9 +33,11 @@
 
     <form class="search" id="search" role="search">
       <label class="prompt" for="q" aria-hidden="true"><span class="prompt-user" id="prompt-user">~</span><span class="prompt-sym">❯</span></label>
-      <input id="q" name="q" type="search" autocomplete="off" spellcheck="false"
-             placeholder="search or type a url" aria-label="Search the web or enter an address">
+      <input id="q" name="q" type="text" role="combobox" autocomplete="off" spellcheck="false"
+             aria-expanded="false" aria-controls="suggestions" aria-autocomplete="list"
+             placeholder="search, a link, or a url" aria-label="Search links, the web, or enter an address">
       <kbd class="hint" aria-hidden="true">/</kbd>
+      <ul class="suggestions" id="suggestions" role="listbox" aria-label="Suggestions" hidden></ul>
     </form>
 
     <section class="links-wrap" aria-labelledby="group-title">
@@ -62,6 +64,10 @@
       <fieldset>
         <legend>theme</legend>
         <div class="themes" id="theme-list" role="radiogroup" aria-label="Theme"></div>
+        <label class="check">
+          <input id="set-wallpaper" type="checkbox">
+          <span>use your Omarchy wallpaper as the background</span>
+        </label>
       </fieldset>
 
       <fieldset>

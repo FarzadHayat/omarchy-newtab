@@ -1,22 +1,42 @@
 #!/bin/bash
-# Copy the active Omarchy theme colors into the extension so the new tab can follow them.
+# Copy the active Omarchy theme colors and wallpaper into the extension so the new tab
+# can follow them.
 # Run by the Omarchy theme-set hook; safe to run by hand.
 set -euo pipefail
 
 theme_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/current/theme"
 colors="$theme_dir/colors.toml"
 name_file="$(dirname "$theme_dir")/theme.name"
-out="$(cd "$(dirname "$0")/.." && pwd)/src/omarchy-theme.json"
+src="$(cd "$(dirname "$0")/.." && pwd)/src"
+out="$src/omarchy-theme.json"
+background="$(dirname "$theme_dir")/background"
 
 [[ -f $colors ]] || { echo "no Omarchy theme colors at $colors" >&2; exit 1; }
 
 get() { sed -n "s/^$1[[:space:]]*=[[:space:]]*\"\(.*\)\".*/\1/p" "$colors" | head -1; }
 
 name="$(cat "$name_file" 2>/dev/null || echo omarchy)"
+
+# Shrink the wallpaper so new tabs stay fast; the version busts the browser cache.
+wallpaper=""
+if [[ -f $background ]]; then
+  source_path="$(readlink -f "$background")"
+  version="$(stat -c %Y "$source_path")-$(printf '%s' "$source_path" | cksum | cut -d' ' -f1)"
+  if [[ "$(cat "$src/.omarchy-wallpaper.version" 2>/dev/null)" != "$version" ]]; then
+    if command -v magick >/dev/null; then
+      magick "$source_path" -resize '2560x1600>' -quality 82 "$src/omarchy-wallpaper.jpg"
+    else
+      cp "$source_path" "$src/omarchy-wallpaper.jpg"
+    fi
+    echo "$version" >"$src/.omarchy-wallpaper.version"
+  fi
+  wallpaper="omarchy-wallpaper.jpg?v=$version"
+fi
 tmp="$(mktemp "$out.XXXXXX")"
 cat >"$tmp" <<JSON
 {
   "name": "$name",
+  "wallpaper": "$wallpaper",
   "mode": "$(get mode)",
   "bg": "$(get background)",
   "surface": "$(get lighter_background)",
