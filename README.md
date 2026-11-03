@@ -45,6 +45,10 @@ Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpack
 
 Run `bin/install --uninstall`, then remove the extension from `chrome://extensions`.
 
+## More for Omarchy
+
+See everything else I've built for Omarchy, each with a one-line install, at **[omarchy.farzadhayat.dev](https://omarchy.farzadhayat.dev)**.
+
 ## License
 
 [MIT](LICENSE)
