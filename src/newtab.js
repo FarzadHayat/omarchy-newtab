@@ -56,7 +56,69 @@ function cleanPalette(raw) {
   const out = { name: typeof raw.name === "string" ? raw.name.slice(0, 60) : "omarchy", mode: raw.mode === "light" ? "light" : "dark" };
   for (const [k, v] of Object.entries(raw)) if (/^[a-z]+$/.test(k) && /^#[0-9a-f]{3,8}$/i.test(v)) out[k] = v;
   if (typeof raw.wallpaper === "string" && /^omarchy-wallpaper\.jpg(\?v=[\w-]+)?$/.test(raw.wallpaper)) out.wallpaper = raw.wallpaper;
+  const look = cleanLook(raw.look);
+  if (look) out.look = look;
   return out.bg && out.fg && out.accent ? out : null;
+}
+
+// The desktop's shape and glass: Hyprland corners, borders, blur and rim, and the
+// shell's surface see-through. Anything missing keeps the stock square, solid look.
+const STOCK_LOOK = {
+  radius: 0, cornerPower: 2, border: 2, blur: false, shadow: false,
+  rim: [], rimIdle: [], rimAngle: 0, glass: 1, scrim: .5, bar: 1, barStyle: "",
+};
+
+function cleanLook(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const n = (v, min, max, d) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : d);
+  const hexes = (v) => (Array.isArray(v) ? v.filter((c) => /^#[0-9a-f]{3,8}$/i.test(c)).slice(0, 10) : []);
+  return {
+    radius: n(raw.radius, 0, 40, 0),
+    cornerPower: n(raw.cornerPower, 1, 10, 2),
+    border: n(raw.border, 0, 6, 2),
+    blur: raw.blur === true,
+    shadow: raw.shadow === true,
+    rim: hexes(raw.rim),
+    rimIdle: hexes(raw.rimIdle),
+    rimAngle: n(raw.rimAngle, 0, 360, 0),
+    glass: n(raw.glass, 0, 1, 1),
+    scrim: n(raw.scrim, 0, 1, .5),
+    bar: n(raw.bar, 0, 1, 1),
+    barStyle: raw.barStyle === "islands" ? "islands" : "",
+  };
+}
+
+function applyLook(look) {
+  const l = { ...STOCK_LOOK, ...look };
+  const root = document.documentElement;
+  const css = root.style;
+  // Very see-through cards are only readable with blur behind them.
+  const glass = l.glass < 1;
+  css.setProperty("--radius", `${l.radius}px`);
+  // Hyprland's rounding_power 2 is a circle and 4 a squircle; CSS superellipse(1) and (2).
+  css.setProperty("--corner-k", Math.log2(l.cornerPower).toFixed(3));
+  css.setProperty("--border", `${l.border}px`);
+  css.setProperty("--glass", glass ? Math.max(l.glass, .35) : 1);
+  css.setProperty("--blur", glass && l.blur ? "24px" : "0px");
+  css.setProperty("--bar-alpha", l.bar);
+  // The stock .5 scrim keeps today's wallpaper dimming; lighter scrims let more through.
+  css.setProperty("--dim", Math.min(1, l.scrim * 2));
+  const stops = (c) => (c.length === 1 ? [c[0], c[0]] : c).join(", ");
+  // Hyprland measures gradient angles counterclockwise from the right; CSS clockwise from the top.
+  const angle = `${90 - l.rimAngle}deg`;
+  if (glass && l.rim.length) {
+    css.setProperty("--rim", `linear-gradient(${angle}, ${stops(l.rim)})`);
+    css.setProperty("--rim-solid", l.rim[0]);
+  } else {
+    css.removeProperty("--rim");
+    css.removeProperty("--rim-solid");
+  }
+  if (glass && l.rimIdle.length) css.setProperty("--edge", l.rimIdle[0]);
+  else css.removeProperty("--edge");
+  root.toggleAttribute("data-glass", glass);
+  // Omarchy turns shadows on globally for floating workspaces, so only trust it on glass themes.
+  root.toggleAttribute("data-shadow", glass && l.shadow);
+  root.dataset.bar = l.barStyle;
 }
 
 function readJSON(key) {
@@ -115,7 +177,9 @@ function palette(name) {
 function applyTheme(name) {
   const t = palette(name);
   const root = document.documentElement.style;
-  for (const [k, v] of Object.entries(t)) if (v.startsWith("#")) root.setProperty(`--${k}`, v);
+  for (const [k, v] of Object.entries(t)) if (typeof v === "string" && v.startsWith("#")) root.setProperty(`--${k}`, v);
+  // Built-in palettes are colors only; the desktop's shape comes with the Omarchy theme.
+  applyLook(name === SYSTEM ? t.look : null);
   document.documentElement.style.colorScheme = t.mode;
   document.querySelectorAll(".links img").forEach((img) => img.complete && markLowContrast(img));
   $("bar-theme").textContent = name === SYSTEM ? `omarchy · ${system ? system.name : "not synced"}` : name;

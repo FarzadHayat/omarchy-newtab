@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Omarchy New Tab",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A calm, keyboard-first Omarchy style new tab page.",
   "chrome_url_overrides": { "newtab": "src/newtab.html" },
   "permissions": ["search", "storage", "favicon"],

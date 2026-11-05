@@ -28,6 +28,58 @@ json() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 name="$(cat "$current/theme.name" 2>/dev/null || echo omarchy)"
 
+# ---------- look: the desktop's shape and glass, not just its colors ----------
+
+shell_toml="$current/theme/shell.toml"
+
+# Value of a key inside one [section] of shell.toml, without quotes or trailing comment.
+shell_get() {
+  [[ -f $shell_toml ]] || return 0
+  awk -v s="[$1]" -v k="$2" '
+    /^[[:space:]]*\[/ { in_s = ($1 == s); next }
+    in_s && $1 == k {
+      sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]+#.*/, ""); gsub(/["\047]/, "")
+      print; exit
+    }' "$shell_toml"
+}
+
+# Live Hyprland value, so user overrides count too. Empty when Hyprland can't be asked.
+hypr() {
+  command -v hyprctl >/dev/null && command -v jq >/dev/null || return 0
+  timeout 2 hyprctl -j getoption "$1" 2>/dev/null |
+    jq -r '[.int, .float, .bool, .gradient, .custom] | map(select(. != null) | tostring) | .[0] // empty' 2>/dev/null || true
+}
+
+# The previous sync's value, for when Hyprland isn't reachable (say, from the wallpaper
+# watcher before a session is up), so the page keeps its shape instead of going square.
+prev() { command -v jq >/dev/null && jq -c ".look.$1 // empty" "$out" 2>/dev/null || true; }
+
+# Hyprland gradients come as "AARRGGBB AARRGGBB 45deg"; give CSS-ordered hex colors.
+grad_colors() {
+  local t list=""
+  for t in $1; do [[ $t =~ ^[0-9a-fA-F]{8}$ ]] && list+="${list:+, }\"#${t:2}${t:0:2}\""; done
+  [[ -z $list ]] || printf '[%s]' "$list"
+}
+grad_angle() {
+  local t
+  for t in $1; do if [[ $t =~ ^([0-9]+)deg$ ]]; then echo "${BASH_REMATCH[1]}"; return; fi; done
+}
+
+# A number matching the pattern, else the fallback.
+num() { [[ $1 =~ ^[0-9]+(\.[0-9]+)?$ ]] && echo "$1" || echo "$2"; }
+
+active_border="$(hypr general:col.active_border)"
+inactive_border="$(hypr general:col.inactive_border)"
+radius="$(num "$(hypr decoration:rounding)" "$(num "$(prev radius)" 0)")"
+corner_power="$(num "$(hypr decoration:rounding_power)" "$(num "$(prev cornerPower)" 2)")"
+border="$(num "$(hypr general:border_size)" "$(num "$(prev border)" 2)")"
+blur="$(hypr decoration:blur:enabled)"; [[ $blur == true || $blur == false ]] || blur="$(prev blur)"
+shadow="$(hypr decoration:shadow:enabled)"; [[ $shadow == true || $shadow == false ]] || shadow="$(prev shadow)"
+rim="$(grad_colors "$active_border")"; rim="${rim:-$(prev rim)}"
+rim_idle="$(grad_colors "$inactive_border")"; rim_idle="${rim_idle:-$(prev rimIdle)}"
+rim_angle="$(num "$(grad_angle "$active_border")" "$(num "$(prev rimAngle)" 0)")"
+bar_style="$(shell_get bar style)"; [[ $bar_style =~ ^[a-z-]{1,20}$ ]] || bar_style=""
+
 # Shrink the wallpaper so new tabs stay fast; the version busts the browser cache.
 # A wallpaper that can't be converted keeps the previous one instead of stopping the color sync.
 wallpaper=""
@@ -71,7 +123,21 @@ cat >"$tmp" <<JSON
   "yellow": "$(json "$(get yellow)")",
   "green": "$(json "$(get green)")",
   "cyan": "$(json "$(get cyan)")",
-  "magenta": "$(json "$(get magenta)")"
+  "magenta": "$(json "$(get magenta)")",
+  "look": {
+    "radius": $radius,
+    "cornerPower": $corner_power,
+    "border": $border,
+    "blur": ${blur:-false},
+    "shadow": ${shadow:-false},
+    "rim": ${rim:-[]},
+    "rimIdle": ${rim_idle:-[]},
+    "rimAngle": $rim_angle,
+    "glass": $(num "$(shell_get menu background-alpha)" 1),
+    "scrim": $(num "$(shell_get menu scrim-alpha)" 0.5),
+    "bar": $(num "$(shell_get bar background-alpha)" 1),
+    "barStyle": "$bar_style"
+  }
 }
 JSON
 chmod 644 "$tmp"

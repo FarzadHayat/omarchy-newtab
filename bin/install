@@ -41,6 +41,10 @@ bin=$hook_bin
 [[ -x \$bin ]] || exit 0
 
 "\$bin" || notify-send -u low "Omarchy New Tab" "Couldn't sync the theme colors."
+
+# Themes with an intro video reload Hyprland after it plays, so the corners and
+# borders read above can still be the old theme's. Read them again once it's done.
+setsid -f bash -c 'sleep 10; exec "\$0"' "\$bin" >/dev/null 2>&1 </dev/null
 EOF
 chmod 755 "$hook"
 

@@ -10,7 +10,7 @@ A calm, keyboard-first new tab page for Chrome and Chromium that matches your [O
 
 ## What you get
 
-- Your Omarchy theme, kept in sync when you switch themes. You can also pick from 11 built-in themes.
+- Your Omarchy theme, kept in sync when you switch themes. That includes its shape: rounded corners, border width, see-through frosted cards and an island bar follow your desktop. You can also pick from 11 built-in themes.
 - Your Omarchy wallpaper as the background, if you want it.
 - A search box that finds your links as you type. It can also search your open tabs, bookmarks and history. Those are off by default; turn each one on in settings and Chrome asks for permission first.
 - Link groups you can open with a single key.
