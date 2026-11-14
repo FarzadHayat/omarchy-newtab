@@ -147,13 +147,17 @@ function save() {
 // this tab for one of those.
 const FOCUS_QUERY = "?focus";
 if (state.focusSearch && location.search !== FOCUS_QUERY && globalThis.chrome?.tabs) {
-  chrome.tabs.getCurrent((tab) => {
-    if (!tab) return;
-    const url = chrome.runtime.getURL(`src/newtab.html${FOCUS_QUERY}`);
-    chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true }, (created) => {
-      if (created && !chrome.runtime.lastError) chrome.tabs.remove(tab.id);
-    });
-  });
+  (async () => {
+    try {
+      const tab = await chrome.tabs.getCurrent();
+      if (!tab) return;
+      const url = chrome.runtime.getURL(`src/newtab.html${FOCUS_QUERY}`);
+      await chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true });
+      await chrome.tabs.remove(tab.id);
+    } catch (err) {
+      console.error("Could not swap to a focused tab:", err);
+    }
+  })();
 }
 
 // ---------- logo ----------
@@ -503,33 +507,36 @@ async function browserSuggestions(query) {
   const jobs = [];
   if (granted.has("tabs")) {
     jobs.push(
-      chrome.tabs.query({}).then((tabs) =>
-        tabs
+      (async () => {
+        const tabs = await chrome.tabs.query({});
+        return tabs
           .filter((t) => !ownPage(t.url) && matchesAll(query, `${t.title} ${t.url}`))
           .slice(0, 3)
-          .map((t) => ({ kind: "tab", label: t.title || t.url, href: t.url, tabId: t.id, windowId: t.windowId })),
-      ),
+          .map((t) => ({ kind: "tab", label: t.title || t.url, href: t.url, tabId: t.id, windowId: t.windowId }));
+      })(),
     );
   }
   if (granted.has("bookmarks")) {
     jobs.push(
-      chrome.bookmarks.search(query).then((marks) =>
-        marks
+      (async () => {
+        const marks = await chrome.bookmarks.search(query);
+        return marks
           .filter((b) => b.url)
           .slice(0, 3)
-          .map((b) => ({ kind: "bookmark", label: b.title || b.url, href: b.url })),
-      ),
+          .map((b) => ({ kind: "bookmark", label: b.title || b.url, href: b.url }));
+      })(),
     );
   }
   if (granted.has("history")) {
     jobs.push(
-      chrome.history.search({ text: query, startTime: 0, maxResults: 25 }).then((items) =>
-        items
+      (async () => {
+        const items = await chrome.history.search({ text: query, startTime: 0, maxResults: 25 });
+        return items
           .filter((h) => !ownPage(h.url))
           .sort((a, b) => b.typedCount - a.typedCount || b.visitCount - a.visitCount)
           .slice(0, 5)
-          .map((h) => ({ kind: "history", label: h.title || h.url, href: h.url })),
-      ),
+          .map((h) => ({ kind: "history", label: h.title || h.url, href: h.url }));
+      })(),
     );
   }
   return (await Promise.allSettled(jobs)).flatMap((r) => (r.status === "fulfilled" ? r.value : []));
@@ -762,9 +769,14 @@ $("set-wallpaper").addEventListener("change", (e) => {
 document.querySelectorAll("[data-source]").forEach((box) =>
   box.addEventListener("change", async () => {
     const permissions = [box.dataset.source];
-    if (box.checked) box.checked = await chrome.permissions.request({ permissions });
-    else await chrome.permissions.remove({ permissions });
-    await loadGranted();
+    try {
+      if (box.checked) box.checked = await chrome.permissions.request({ permissions });
+      else await chrome.permissions.remove({ permissions });
+      await loadGranted();
+    } catch (err) {
+      console.error("Could not change permission:", err);
+      box.checked = !box.checked;
+    }
   }),
 );
 
