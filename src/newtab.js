@@ -142,23 +142,8 @@ function save() {
   localStorage.setItem("omarchy-newtab", JSON.stringify(state));
 }
 
-// Chrome keeps focus in the address bar on its new tab page, even after the page
-// navigates. A tab opened by the extension starts with the page focused, so swap
-// this tab for one of those.
+// Swapping to a tab that starts focused lives in early.js, so it runs before the page loads.
 const FOCUS_QUERY = "?focus";
-if (state.focusSearch && location.search !== FOCUS_QUERY && globalThis.chrome?.tabs) {
-  (async () => {
-    try {
-      const tab = await chrome.tabs.getCurrent();
-      if (!tab) return;
-      const url = chrome.runtime.getURL(`src/newtab.html${FOCUS_QUERY}`);
-      await chrome.tabs.create({ url, windowId: tab.windowId, index: tab.index, active: true });
-      await chrome.tabs.remove(tab.id);
-    } catch (err) {
-      console.error("Could not swap to a focused tab:", err);
-    }
-  })();
-}
 
 // ---------- logo ----------
 
@@ -853,7 +838,16 @@ updatePrompt();
 tick();
 setInterval(tick, 1000);
 loadGranted();
-if (location.search === FOCUS_QUERY) q.focus();
+if (location.search === FOCUS_QUERY) {
+  q.focus();
+  // Letters typed while the page was still loading.
+  const early = window.__earlyKeys || [];
+  if (early.length && !q.value) {
+    q.value = early.join("");
+    q.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+window.__stopEarlyKeys?.();
 syncSystemTheme();
 setInterval(() => document.visibilityState === "visible" && !systemMissing && syncSystemTheme(), 2000);
 document.addEventListener("visibilitychange", syncSystemTheme);
